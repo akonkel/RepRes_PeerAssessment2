@@ -31,8 +31,34 @@ storm$END_DATE <- as.Date(storm$END_DATE,format = '%m/%d/%Y %T')
 The main data issue is that we want to work with the property and crop damage values, but the entry is a number separated from a multiplier in another column (e.g., 'PROPDMG' could be 5 in two different cases but refer to either five thousand or five million depending on if 'PROPDMGEXP' says K or M).  This code should fix that up.  I'm leaving blank entries in so that there is some indication of weather events that cause no damage.
 ``` {r}
 #some entries are unexpected value, but they appear to be rare.  We'll remove anything that isn't empty, K, M, or B
-storm2 <- storm2 %>% filter(PROPDMGEXP=='' | PROPDMGEXP=='K' | PROPDMGEXP=='M' | PROPDMGEXP=='B' | CROPDMGEXP=='' | CROPDMGEXP=='K' | CROPDMGEXP=='M' | CROPDMGEXP=='B') %>% mutate(propcost = ifelse(PROPDMGEXP=='B',PROPDMG*1000000000,ifelse(PROPDMGEXP=='M',PROPDMG*1000000,ifelse(PROPDMGEXP=='K',PROPDMG*1000,PROPDMG)))) %>% mutate(cropcost = ifelse(CROPDMGEXP=='B',CROPDMG*1000000000,ifelse(CROPDMGEXP=='M',CROPDMG*1000000,ifelse(CROPDMGEXP=='K',CROPDMG*1000,CROPDMG)))) %>% mutate(totalcost= propcost+cropcost)
+#this is kind of a lot, but it insures that all the cost multipliers get handled correctly
+lowestlowest <- storm %>% filter(PROPDMGEXP=='' & CROPDMGEXP=='') %>% mutate(propcost=PROPDMG,cropcost=CROPDMG)
+lowestlow <- storm %>% filter(PROPDMGEXP=='' & CROPDMGEXP=='K') %>% mutate(propcost=PROPDMG,cropcost=CROPDMG*1000)
+lowestmed <- storm %>% filter(PROPDMGEXP=='' & CROPDMGEXP=='M') %>% mutate(propcost=PROPDMG,cropcost=CROPDMG*1000000)
+lowesthi <- storm %>% filter(PROPDMGEXP=='' & CROPDMGEXP=='B') %>% mutate(propcost=PROPDMG,cropcost=CROPDMG*1000000000)
+lowlowest <- storm %>% filter(PROPDMGEXP=='K' & CROPDMGEXP=='') %>% mutate(propcost=PROPDMG*1000,cropcost=CROPDMG)
+lowlow <- storm %>% filter(PROPDMGEXP=='K' & CROPDMGEXP=='K') %>% mutate(propcost=PROPDMG*1000,cropcost=CROPDMG*1000)
+lowmed <- storm %>% filter(PROPDMGEXP=='K' & CROPDMGEXP=='M') %>% mutate(propcost=PROPDMG*1000,cropcost=CROPDMG*1000000)
+lowhi <- storm %>% filter(PROPDMGEXP=='K' & CROPDMGEXP=='B') %>% mutate(propcost=PROPDMG*1000,cropcost=CROPDMG*1000000000)
+medlowest <- storm %>% filter(PROPDMGEXP=='M' & CROPDMGEXP=='') %>% mutate(propcost=PROPDMG*1000000,cropcost=CROPDMG)
+medlow <- storm %>% filter(PROPDMGEXP=='M' & CROPDMGEXP=='K') %>% mutate(propcost=PROPDMG*1000000,cropcost=CROPDMG*1000)
+medmed <- storm %>% filter(PROPDMGEXP=='M' & CROPDMGEXP=='M') %>% mutate(propcost=PROPDMG*1000000,cropcost=CROPDMG*1000000)
+medhi <- storm %>% filter(PROPDMGEXP=='M' & CROPDMGEXP=='B') %>% mutate(propcost=PROPDMG*1000000,cropcost=CROPDMG*1000000000)
+hilowest <- storm %>% filter(PROPDMGEXP=='B' & CROPDMGEXP=='') %>% mutate(propcost=PROPDMG*1000000000,cropcost=CROPDMG)
+hilow <- storm %>% filter(PROPDMGEXP=='B' & CROPDMGEXP=='K') %>% mutate(propcost=PROPDMG*1000000000,cropcost=CROPDMG*1000)
+himed <- storm %>% filter(PROPDMGEXP=='B' & CROPDMGEXP=='M') %>% mutate(propcost=PROPDMG*1000000000,cropcost=CROPDMG*1000000)
+hihi <- storm %>% filter(PROPDMGEXP=='B' & CROPDMGEXP=='B') %>% mutate(propcost=PROPDMG*1000000000,cropcost=CROPDMG*1000000000)
+storm2 <- bind_rows(lowestlowest,lowestlow,lowestmed,lowesthi,lowlowest,lowlow,lowmed,lowhi,medlowest,medlow,medmed,medhi,hilowest,hilow,himed,hihi) %>% mutate(totalcost = propcost+cropcost)
 ```
+At this point, I still have a huge data set.  It has a number of issues, including typos/incorrect entries for the event types, property/crop damage amounts, and so on.  In order to mitigate these issues, I'm going to
+* limit the data set to events since 1990.  This also cuts out a lot of 0 damage events, and partially mitigates concerns on inflation.
+* remove any events with 0 total cost, since they had no impact on the economy.
+* remove any events with 0 fatalities or injuries, since they had no impact on population health.
+
+``` {r}
+storm2 <- storm2 %>% filter(totalcost>0) %>% filter(INJURIES>0 | FATALITIES>0) %>% filter(BGN_DATE>as.Date('1990/1/1'))
+```
+This still leaves quite a bit of data: nearly 7500 entries and 135 event types.  But this is much more manageable, and we'll call it good enough for my purposes.  
 ## Results
 
 ## Conclusions

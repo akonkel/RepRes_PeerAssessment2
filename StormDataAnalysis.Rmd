@@ -81,6 +81,8 @@ fatalities <- storm2 %>% group_by(event_cat) %>% summarize(aveFatal=mean(FATALIT
 par(mar=c(4,4,2,0),mfrow=c(2,2))
 ggplot(injuries,aes(event_cat,aveInjury,width=num/max(num))) + geom_bar(stat='identity',fill='red') + labs(y='Average Number of Injuries per Event',x='Event Category',title='Average Number of Injuries')
 ggplot(injuries,aes(event_cat,totInjury,width=num/max(num))) + geom_bar(stat='identity',fill='red') + labs(y='Total Number of Injuries per Event',x='Event Category',title='Total Number of Injuries')
+ggplot(fatalities,aes(event_cat,aveFatal,width=num/max(num))) + geom_bar(stat='identity',fill='darkred') + labs(y='Average Number of Fatalities per Event',x='Event Category',title='Average Number of Fatalities')
+ggplot(fatalities,aes(event_cat,totFatal,width=num/max(num))) + geom_bar(stat='identity',fill='darkred') + labs(y='Total Number of Fatalities per Event',x='Event Category',title='Total Number of Fatalities')
 ```
 
 ## Conclusions

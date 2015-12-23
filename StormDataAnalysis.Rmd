@@ -1,0 +1,13 @@
+---
+title: "Reproducible Research Assignment 2"
+author: "Alex Konkel"
+date: "December 23, 2015"
+output: html_document
+---
+
+# Synposis
+This will be filled in later with a summary of my analysis and results
+
+# The Effects of Storms on Population Health and the Economy
+For peer assessment 2 in the Reproducible Research course, I will examine data provided from the NOAA storm database.  I will be looking at what types of events are most harmful to the US economy and population health.
+## Data Processing

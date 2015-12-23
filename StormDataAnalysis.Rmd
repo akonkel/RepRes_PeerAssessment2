@@ -5,11 +5,12 @@ date: "December 23, 2015"
 output: html_document
 ---
 
-# Synposis
+# Synopsis
 This will be filled in later with a summary of my analysis and results
 
 # The Effects of Storms on Population Health and the Economy
 For peer assessment 2 in the Reproducible Research course, I will examine data provided from the NOAA storm database.  I will be looking at what types of events are most harmful to the US economy and population health.
+
 ## Data Processing
 To begin, I'll download and inspect the National Oceanic and Atmospheric Administration's storm database, as linked on the assignment website.  
 ``` {r}
@@ -28,7 +29,7 @@ storm <- tbl_df(storm)
 storm$BGN_DATE <- as.Date(storm$BGN_DATE,format = '%m/%d/%Y %T')
 storm$END_DATE <- as.Date(storm$END_DATE,format = '%m/%d/%Y %T')
 ```
-The main data issue is that we want to work with the property and crop damage values, but the entry is a number separated from a multiplier in another column (e.g., 'PROPDMG' could be 5 in two different cases but refer to either five thousand or five million depending on if 'PROPDMGEXP' says K or M).  This code should fix that up.  I'm leaving blank entries in so that there is some indication of weather events that cause no damage.
+The main data issue is that we want to work with the property and crop damage values, but the entry is a number separated from a multiplier in another column (e.g., 'PROPDMG' could be 5 in two different cases but refer to either five thousand or five million depending on if 'PROPDMGEXP' says K or M).  This code should fix that up.
 ``` {r}
 #some entries are unexpected value, but they appear to be rare.  We'll remove anything that isn't empty, K, M, or B
 #this is kind of a lot, but it insures that all the cost multipliers get handled correctly
@@ -51,14 +52,35 @@ hihi <- storm %>% filter(PROPDMGEXP=='B' & CROPDMGEXP=='B') %>% mutate(propcost=
 storm2 <- bind_rows(lowestlowest,lowestlow,lowestmed,lowesthi,lowlowest,lowlow,lowmed,lowhi,medlowest,medlow,medmed,medhi,hilowest,hilow,himed,hihi) %>% mutate(totalcost = propcost+cropcost)
 ```
 At this point, I still have a huge data set.  It has a number of issues, including typos/incorrect entries for the event types, property/crop damage amounts, and so on.  In order to mitigate these issues, I'm going to
-* limit the data set to events since 1990.  This also cuts out a lot of 0 damage events, and partially mitigates concerns on inflation.
-* remove any events with 0 total cost, since they had no impact on the economy.
-* remove any events with 0 fatalities or injuries, since they had no impact on population health.
+- limit the data set to events since 1990.  This also cuts out a lot of 0 damage events, and partially mitigates concerns on inflation.
+- remove any events with 0 total cost, since they had no impact on the economy.
+- remove any events with 0 fatalities or injuries, since they had no impact on population health.
 
 ``` {r}
 storm2 <- storm2 %>% filter(totalcost>0) %>% filter(INJURIES>0 | FATALITIES>0) %>% filter(BGN_DATE>as.Date('1990/1/1'))
 ```
 This still leaves quite a bit of data: nearly 7500 entries and 135 event types.  But this is much more manageable, and we'll call it good enough for my purposes.  
+
 ## Results
+Moving on to the first question: what events are most harmful to population health?  To answer this question, I'll start by making a table of fatalities and injuries by event type.  I'll look at both the total and the mean, since there could be a difference between events that happen often but are less dangerous and those that are rare but very dangerous.
+``` {r}
+sort(with(storm2,tapply(INJURIES,EVTYPE,sum)))
+sort(with(storm2,tapply(INJURIES,EVTYPE,mean)))
+sort(with(storm2,tapply(FATALITIES,EVTYPE,sum)))
+sort(with(storm2,tapply(FATALITIES,EVTYPE,mean)))
+```
+It looks like major wind storms (hurricanes, typhoons, and tornadoes) cause the most injuries.  Somewhat surprisingly, they don't have the highest average injury rate though; that distinction belongs to wild fires and heat.  However, it also becomes clear that these categories should be combined if possible.  There are many entries that involve cold, for example, and small categories (like wild fires) with few entries.  Looking over the options, I will sort the events into 'flood', 'cold', 'heat', 'thunderstorm', 'hurricane', 'tornado', 'wind', 'storm', and 'other'.  Some events could be sorted into multiple categories, such as 'TSTM WIND' into thunderstorm or wind, but I will order the categorization so that events get sorted more into causes (such as the thunderstorm) as opposed to the effects (the wind).  Some categorizations may be inaccurate, but the categories can be viewed broadly.
+``` {r}
+storm2 <- storm2 %>% mutate(event_cat='other') %>% mutate(event_cat=ifelse(grepl('wind',tolower(EVTYPE)),'wind',event_cat)) %>% mutate(event_cat=ifelse(grepl('flood',tolower(EVTYPE)),'flooding',event_cat)) %>% mutate(event_cat=ifelse(grepl('cold',tolower(EVTYPE)),'cold',event_cat)) %>% mutate(event_cat=ifelse(grepl('freez',tolower(EVTYPE)),'cold',event_cat)) %>% mutate(event_cat=ifelse(grepl('snow',tolower(EVTYPE)),'cold',event_cat)) %>% mutate(event_cat=ifelse(grepl('heat',tolower(EVTYPE)),'heat',event_cat)) %>% mutate(event_cat=ifelse(grepl('storm',tolower(EVTYPE)),'storm',event_cat)) %>% mutate(event_cat=ifelse(grepl('tstm',tolower(EVTYPE)),'thunderstorm',event_cat)) %>% mutate(event_cat=ifelse(grepl('thunder',tolower(EVTYPE)),'thunderstorm',event_cat)) %>% mutate(event_cat=ifelse(grepl('hurr',tolower(EVTYPE)),'hurricane',event_cat)) %>% mutate(event_cat=ifelse(grepl('typh',tolower(EVTYPE)),'hurricane',event_cat)) %>% mutate(event_cat=ifelse(grepl('torn',tolower(EVTYPE)),'tornado',event_cat)) %>% mutate(event_cat=ifelse(grepl('heat',tolower(EVTYPE)),'heat',event_cat))
+```
+Now I'll visualize the results.
+``` {r}
+library(ggplot2)
+injuries <- storm2 %>% group_by(event_cat) %>% summarize(aveInjury=mean(INJURIES),totInjury=sum(INJURIES),num=length(INJURIES))
+fatalities <- storm2 %>% group_by(event_cat) %>% summarize(aveFatal=mean(FATALITIES),totFatal=sum(FATALITIES),num=length(FATALITIES))
+par(mar=c(4,4,2,0),mfrow=c(2,2))
+ggplot(injuries,aes(event_cat,aveInjury,width=num/max(num))) + geom_bar(stat='identity',fill='red') + labs(y='Average Number of Injuries per Event',x='Event Category',title='Average Number of Injuries')
+ggplot(injuries,aes(event_cat,totInjury,width=num/max(num))) + geom_bar(stat='identity',fill='red') + labs(y='Total Number of Injuries per Event',x='Event Category',title='Total Number of Injuries')
+```
 
 ## Conclusions

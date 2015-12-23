@@ -11,3 +11,28 @@ This will be filled in later with a summary of my analysis and results
 # The Effects of Storms on Population Health and the Economy
 For peer assessment 2 in the Reproducible Research course, I will examine data provided from the NOAA storm database.  I will be looking at what types of events are most harmful to the US economy and population health.
 ## Data Processing
+To begin, I'll download and inspect the National Oceanic and Atmospheric Administration's storm database, as linked on the assignment website.  
+``` {r}
+fileName <- c("storm_data.zip")
+if(!file.exists(fileName)) {
+  download.file("https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2", fileName)
+} else {
+  message("... Source file already exists ...")
+}
+```
+While this is a zipped file, it can still be read by common R commands.  I'll convert it to the dplyr data table class, which will hopefully be a bit faster and more efficient.  I'll also fix some of the date columns in case I decide to use them later.
+``` {r}
+storm <- read.csv('storm_data.zip',header=TRUE,stringsAsFactors = FALSE)
+library(dplyr)
+storm <- tbl_df(storm)
+storm$BGN_DATE <- as.Date(storm$BGN_DATE,format = '%m/%d/%Y %T')
+storm$END_DATE <- as.Date(storm$END_DATE,format = '%m/%d/%Y %T')
+```
+The main data issue is that we want to work with the property and crop damage values, but the entry is a number separated from a multiplier in another column (e.g., 'PROPDMG' could be 5 in two different cases but refer to either five thousand or five million depending on if 'PROPDMGEXP' says K or M).  This code should fix that up.  I'm leaving blank entries in so that there is some indication of weather events that cause no damage.
+``` {r}
+#some entries are unexpected value, but they appear to be rare.  We'll remove anything that isn't empty, K, M, or B
+storm2 <- storm2 %>% filter(PROPDMGEXP=='' | PROPDMGEXP=='K' | PROPDMGEXP=='M' | PROPDMGEXP=='B' | CROPDMGEXP=='' | CROPDMGEXP=='K' | CROPDMGEXP=='M' | CROPDMGEXP=='B') %>% mutate(propcost = ifelse(PROPDMGEXP=='B',PROPDMG*1000000000,ifelse(PROPDMGEXP=='M',PROPDMG*1000000,ifelse(PROPDMGEXP=='K',PROPDMG*1000,PROPDMG)))) %>% mutate(cropcost = ifelse(CROPDMGEXP=='B',CROPDMG*1000000000,ifelse(CROPDMGEXP=='M',CROPDMG*1000000,ifelse(CROPDMGEXP=='K',CROPDMG*1000,CROPDMG)))) %>% mutate(totalcost= propcost+cropcost)
+```
+## Results
+
+## Conclusions

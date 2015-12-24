@@ -1,0 +1,129 @@
+---
+title: "The Importance of Heat Stroke: Reproducible Research Assignment 2"
+author: "Alex Konkel"
+date: "December 23, 2015"
+output: pdf_document
+---
+
+# Synopsis
+Using the National Oceanic and Atmospheric Administration (NOAA)'s storm database, I investigate what type of weather events have the most adverse impact on both economic and population health.  This analysis is limited to the span from 1990 to 2012.  Both the total and average impact per event are taken into account with regard to injuries, fatalities, and total damages (combining property and crop damage).  The results suggest that large storms (i.e. hurricanes and tornadoes) have, unsurprisingly, large impacts on the US.  Perhaps more surprisingly, heat-related events are comparatively rare but have a large impact when they do occur.  Following on these results, it would be beneficial to provide better warning and resouces when large storms and heat waves are expected to occur.
+
+# The Effects of Storms on Population Health and the Economy
+For peer assessment 2 in the Reproducible Research course, I will examine data provided from the NOAA storm database.  I will be looking at what types of events are most harmful to the US economy and population health.
+
+## Data Processing
+To begin, I'll download and inspect the National Oceanic and Atmospheric Administration's storm database, as linked on the assignment website.  
+``` {r}
+fileName <- c("storm_data.zip")
+if(!file.exists(fileName)) {
+  download.file("https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2", fileName)
+} else {
+  message("... Source file already exists ...")
+}
+```
+While this is a zipped file, it can still be read by common R commands.  I'll convert it to the dplyr data table class, which will hopefully be a bit faster and more efficient.  I'll also fix some of the date columns in case I decide to use them later.
+``` {r}
+storm <- read.csv('storm_data.zip',header=TRUE,stringsAsFactors = FALSE)
+library(dplyr)
+storm <- tbl_df(storm)
+storm$BGN_DATE <- as.Date(storm$BGN_DATE,format = '%m/%d/%Y %T')
+storm$END_DATE <- as.Date(storm$END_DATE,format = '%m/%d/%Y %T')
+```
+The main data issue is that we want to work with the property and crop damage values, but the entry is a number separated from a multiplier in another column (e.g., 'PROPDMG' could be 5 in two different cases but refer to either five thousand or five million depending on if 'PROPDMGEXP' says K or M).  This code should fix that up.
+``` {r}
+#some entries are unexpected values, but they appear to be rare.  We'll remove anything that isn't empty, K, M, or B
+#this is kind of a lot, but it insures that all the cost multipliers get handled correctly
+lowestlowest <- storm %>% filter(PROPDMGEXP=='' & CROPDMGEXP=='') %>% mutate(propcost=PROPDMG,cropcost=CROPDMG)
+lowestlow <- storm %>% filter(PROPDMGEXP=='' & CROPDMGEXP=='K') %>% mutate(propcost=PROPDMG,cropcost=CROPDMG*1000)
+lowestmed <- storm %>% filter(PROPDMGEXP=='' & CROPDMGEXP=='M') %>% mutate(propcost=PROPDMG,cropcost=CROPDMG*1000000)
+lowesthi <- storm %>% filter(PROPDMGEXP=='' & CROPDMGEXP=='B') %>% mutate(propcost=PROPDMG,cropcost=CROPDMG*1000000000)
+lowlowest <- storm %>% filter(PROPDMGEXP=='K' & CROPDMGEXP=='') %>% mutate(propcost=PROPDMG*1000,cropcost=CROPDMG)
+lowlow <- storm %>% filter(PROPDMGEXP=='K' & CROPDMGEXP=='K') %>% mutate(propcost=PROPDMG*1000,cropcost=CROPDMG*1000)
+lowmed <- storm %>% filter(PROPDMGEXP=='K' & CROPDMGEXP=='M') %>% mutate(propcost=PROPDMG*1000,cropcost=CROPDMG*1000000)
+lowhi <- storm %>% filter(PROPDMGEXP=='K' & CROPDMGEXP=='B') %>% mutate(propcost=PROPDMG*1000,cropcost=CROPDMG*1000000000)
+medlowest <- storm %>% filter(PROPDMGEXP=='M' & CROPDMGEXP=='') %>% mutate(propcost=PROPDMG*1000000,cropcost=CROPDMG)
+medlow <- storm %>% filter(PROPDMGEXP=='M' & CROPDMGEXP=='K') %>% mutate(propcost=PROPDMG*1000000,cropcost=CROPDMG*1000)
+medmed <- storm %>% filter(PROPDMGEXP=='M' & CROPDMGEXP=='M') %>% mutate(propcost=PROPDMG*1000000,cropcost=CROPDMG*1000000)
+medhi <- storm %>% filter(PROPDMGEXP=='M' & CROPDMGEXP=='B') %>% mutate(propcost=PROPDMG*1000000,cropcost=CROPDMG*1000000000)
+hilowest <- storm %>% filter(PROPDMGEXP=='B' & CROPDMGEXP=='') %>% mutate(propcost=PROPDMG*1000000000,cropcost=CROPDMG)
+hilow <- storm %>% filter(PROPDMGEXP=='B' & CROPDMGEXP=='K') %>% mutate(propcost=PROPDMG*1000000000,cropcost=CROPDMG*1000)
+himed <- storm %>% filter(PROPDMGEXP=='B' & CROPDMGEXP=='M') %>% mutate(propcost=PROPDMG*1000000000,cropcost=CROPDMG*1000000)
+hihi <- storm %>% filter(PROPDMGEXP=='B' & CROPDMGEXP=='B') %>% mutate(propcost=PROPDMG*1000000000,cropcost=CROPDMG*1000000000)
+storm2 <- bind_rows(lowestlowest,lowestlow,lowestmed,lowesthi,lowlowest,lowlow,lowmed,lowhi,medlowest,medlow,medmed,medhi,hilowest,hilow,himed,hihi) %>% mutate(totalcost = propcost+cropcost)
+```
+At this point, I still have a huge data set.  It has a number of issues, including typos/incorrect/multiple entries for the event types, property/crop damage amounts, and so on.  In order to mitigate these issues, I'm going to
+
+* limit the data set to events since 1990.  This also cuts out a lot of 0 damage events, and partially mitigates concerns on inflation.
+* remove any events with 0 total cost, since they had no impact on the economy.
+* remove any events with 0 fatalities or injuries, since they had no impact on population health.
+
+``` {r}
+storm2 <- storm2 %>% filter(totalcost>0) %>% filter(INJURIES>0 | FATALITIES>0) %>% filter(BGN_DATE>as.Date('1990/1/1'))
+```
+This still leaves quite a bit of data: nearly 7500 entries and 135 event types.  But this is much more manageable, and I'll call it good enough for my purposes.  
+
+## Results
+Moving on to the first question: what events are most harmful to population health?  To answer this question, I'll start by making a table of fatalities and injuries by event type.  I'll look at both the total and the mean, since there could be a difference between events that happen often but are less dangerous and those that are rare but very dangerous.
+``` {r,results='hide'}
+#note this is the one place where I hide output; no reason to show all this.
+sort(with(storm2,tapply(INJURIES,EVTYPE,sum)))
+sort(with(storm2,tapply(INJURIES,EVTYPE,mean)))
+sort(with(storm2,tapply(FATALITIES,EVTYPE,sum)))
+sort(with(storm2,tapply(FATALITIES,EVTYPE,mean)))
+```
+It looks like major wind storms (hurricanes, typhoons, and tornadoes) cause the most injuries.  Somewhat surprisingly, they don't have the highest average injury rate though; that distinction belongs to wild fires and heat.  However, it also becomes clear that these categories should be combined if possible.  There are many entries that involve cold, for example, and small categories (like wild fires) with few entries.  Looking over the options, I will sort the events into 'flood', 'cold', 'heat', 'thunderstorm', 'hurricane', 'tornado', 'wind', 'storm', and 'other'.  Some events could be sorted into multiple categories, such as 'TSTM WIND' into thunderstorm or wind, but I will order the categorization so that events get sorted more into causes (such as the thunderstorm) as opposed to the effects (the wind).  Some categorizations may be inaccurate, but the categories can be viewed broadly.
+``` {r}
+storm2 <- storm2 %>% mutate(event_cat='other') %>% mutate(event_cat=ifelse(grepl('wind',tolower(EVTYPE)),'wind',event_cat)) %>% mutate(event_cat=ifelse(grepl('flood',tolower(EVTYPE)),'flooding',event_cat)) %>% mutate(event_cat=ifelse(grepl('cold',tolower(EVTYPE)),'cold',event_cat)) %>% mutate(event_cat=ifelse(grepl('freez',tolower(EVTYPE)),'cold',event_cat)) %>% mutate(event_cat=ifelse(grepl('snow',tolower(EVTYPE)),'cold',event_cat)) %>% mutate(event_cat=ifelse(grepl('heat',tolower(EVTYPE)),'heat',event_cat)) %>% mutate(event_cat=ifelse(grepl('storm',tolower(EVTYPE)),'storm',event_cat)) %>%
+mutate(event_cat=ifelse(grepl('ice',tolower(EVTYPE)),'cold',event_cat)) %>%  mutate(event_cat=ifelse(grepl('tstm',tolower(EVTYPE)),'tstorm',event_cat)) %>% mutate(event_cat=ifelse(grepl('thunder',tolower(EVTYPE)),'tstorm',event_cat)) %>% mutate(event_cat=ifelse(grepl('hurr',tolower(EVTYPE)),'hurricane',event_cat)) %>% mutate(event_cat=ifelse(grepl('typh',tolower(EVTYPE)),'hurricane',event_cat)) %>% mutate(event_cat=ifelse(grepl('torn',tolower(EVTYPE)),'tornado',event_cat)) %>% mutate(event_cat=ifelse(grepl('trop',tolower(EVTYPE)),'hurricane',event_cat))
+```
+Now I'll visualize the results.
+``` {r,fig.width=9, fig.height = 8}
+library(ggplot2)
+library(gridExtra)
+injuries <- storm2 %>% group_by(event_cat) %>% summarize(aveInjury=mean(INJURIES),totInjury=sum(INJURIES),num=length(INJURIES))
+fatalities <- storm2 %>% group_by(event_cat) %>% summarize(aveFatal=mean(FATALITIES),totFatal=sum(FATALITIES),num=length(FATALITIES))
+plot1 <- ggplot(injuries,aes(event_cat,aveInjury,width=rank(num)/max(rank(num)))) + geom_bar(stat='identity',fill='red') + labs(y='Average Number of Injuries per Event',x='Event Category',title='Average Number of Injuries')
+plot2 <- ggplot(injuries,aes(event_cat,totInjury,width=rank(num)/max(rank(num)))) + geom_bar(stat='identity',fill='red') + labs(y='Total Number of Injuries per Event',x='Event Category',title='Total Number of Injuries')
+plot3 <- ggplot(fatalities,aes(event_cat,aveFatal,width=rank(num)/max(rank(num)))) + geom_bar(stat='identity',fill='darkred') + labs(y='Average Number of Fatalities per Event',x='Event Category',title='Average Number of Fatalities')
+plot4 <- ggplot(fatalities,aes(event_cat,totFatal,width=rank(num)/max(rank(num)))) + geom_bar(stat='identity',fill='darkred') + labs(y='Total Number of Fatalities per Event',x='Event Category',title='Total Number of Fatalities')
+grid.arrange(plot1,plot2,plot3,plot4, ncol=2)
+```
+
+In this plot, injuries are on top and fatalities on the bottom; averages are on the left and totals on the right.  The width of each bar is how often events in a certain category occur relative to the most common event.  Thus tornadoes are the widest bar because they happen the most often.  Tornadoes cause a fair number of injuries and fatalities per occurrence, and the most overall because of how often they occur, but heat-related events actually cause the most injuries and fatalities per occurrence by a fairly wide margin.
+
+Now I'll address the second question, which is the economic impact of weather events.  I'll take a similar approach, but focus on the total cost calculated earlier, which is the sum of the property and crop damage estimates.
+``` {r, fig.width=9}
+costs <- storm2 %>% group_by(event_cat) %>% summarize(aveCost=mean(totalcost),totCost=sum(totalcost),num=length(totalcost))
+plot1 <- ggplot(costs,aes(event_cat,aveCost,width=rank(num)/max(rank(num)))) + geom_bar(stat='identity',fill='red') + labs(y='Average Cost of Damages per Event',x='Event Category',title='Average Cost')
+plot2 <- ggplot(costs,aes(event_cat,totCost,width=rank(num)/max(rank(num)))) + geom_bar(stat='identity',fill='red') + labs(y='Total Cost of Damages per Event',x='Event Category',title='Total Cost')
+grid.arrange(plot1,plot2, ncol=2)
+```
+
+This figure is laid out similarly to the previous one, with average on the left and total on the right and the width of the bars linked to how often an event occurs.  There is a clear 'winner' in this case, as hurricanes have both the highest average and total economic impact.  As was the case with injuries/fatalities, tornadoes are not overly damaging on average (5th out of the 9 categories) but have a high total impact (2nd) due to their frequency.  
+
+As a final check, I'll return to a potential issue with my data processing choices.  The results above are based on a dataset where some damage or injuries occurred.  But what if some events occur more frequently with no harm done?  For example, perhaps there are heat waves where everyone is fine.  The analysis so far would make them look dangerous on average because when some injuries do occur, there tend to be a high number of them, but in general they are harmless. To investigate this, I will repeat the above analyses but only filter the original data set by date.
+``` {r, fig.width=9, fig.height=12}
+storm3 <- bind_rows(lowestlowest,lowestlow,lowestmed,lowesthi,lowlowest,lowlow,lowmed,lowhi,medlowest,medlow,medmed,medhi,hilowest,hilow,himed,hihi) %>% mutate(totalcost = propcost+cropcost)
+storm3 <- storm3 %>% filter(BGN_DATE>as.Date('1990/1/1'))
+storm3 <- storm3 %>% mutate(event_cat='other') %>% mutate(event_cat=ifelse(grepl('wind',tolower(EVTYPE)),'wind',event_cat)) %>% mutate(event_cat=ifelse(grepl('flood',tolower(EVTYPE)),'flooding',event_cat)) %>% mutate(event_cat=ifelse(grepl('cold',tolower(EVTYPE)),'cold',event_cat)) %>% mutate(event_cat=ifelse(grepl('freez',tolower(EVTYPE)),'cold',event_cat)) %>% mutate(event_cat=ifelse(grepl('snow',tolower(EVTYPE)),'cold',event_cat)) %>% mutate(event_cat=ifelse(grepl('heat',tolower(EVTYPE)),'heat',event_cat)) %>% mutate(event_cat=ifelse(grepl('storm',tolower(EVTYPE)),'storm',event_cat)) %>%
+mutate(event_cat=ifelse(grepl('ice',tolower(EVTYPE)),'cold',event_cat)) %>%  mutate(event_cat=ifelse(grepl('tstm',tolower(EVTYPE)),'tstorm',event_cat)) %>% mutate(event_cat=ifelse(grepl('thunder',tolower(EVTYPE)),'tstorm',event_cat)) %>% mutate(event_cat=ifelse(grepl('hurr',tolower(EVTYPE)),'hurricane',event_cat)) %>% mutate(event_cat=ifelse(grepl('typh',tolower(EVTYPE)),'hurricane',event_cat)) %>% mutate(event_cat=ifelse(grepl('torn',tolower(EVTYPE)),'tornado',event_cat)) %>% mutate(event_cat=ifelse(grepl('trop',tolower(EVTYPE)),'hurricane',event_cat))
+injuries2 <- storm3 %>% group_by(event_cat) %>% summarize(aveInjury=mean(INJURIES),totInjury=sum(INJURIES),num=length(INJURIES))
+fatalities2 <- storm3 %>% group_by(event_cat) %>% summarize(aveFatal=mean(FATALITIES),totFatal=sum(FATALITIES),num=length(FATALITIES))
+costs2 <- storm3 %>% group_by(event_cat) %>% summarize(aveCost=mean(totalcost),totCost=sum(totalcost),num=length(totalcost))
+plot1 <- ggplot(injuries2,aes(event_cat,aveInjury,width=rank(num)/max(rank(num)))) + geom_bar(stat='identity',fill='red') + labs(y='Average Number of Injuries per Event',x='Event Category',title='Average Number of Injuries')
+plot2 <- ggplot(injuries2,aes(event_cat,totInjury,width=rank(num)/max(rank(num)))) + geom_bar(stat='identity',fill='red') + labs(y='Total Number of Injuries per Event',x='Event Category',title='Total Number of Injuries')
+plot3 <- ggplot(fatalities2,aes(event_cat,aveFatal,width=rank(num)/max(rank(num)))) + geom_bar(stat='identity',fill='darkred') + labs(y='Average Number of Fatalities per Event',x='Event Category',title='Average Number of Fatalities')
+plot4 <- ggplot(fatalities2,aes(event_cat,totFatal,width=rank(num)/max(rank(num)))) + geom_bar(stat='identity',fill='darkred') + labs(y='Total Number of Fatalities per Event',x='Event Category',title='Total Number of Fatalities')
+plot5 <- ggplot(costs2,aes(event_cat,aveCost,width=rank(num)/max(rank(num)))) + geom_bar(stat='identity',fill='red') + labs(y='Average Cost of Damages per Event',x='Event Category',title='Average Cost')
+plot6 <- ggplot(costs2,aes(event_cat,totCost,width=rank(num)/max(rank(num)))) + geom_bar(stat='identity',fill='red') + labs(y='Total Cost of Damages per Event',x='Event Category',title='Total Cost')
+grid.arrange(plot1,plot2,plot3,plot4, plot5, plot6, ncol=2)
+```
+
+Inspection of these tables show that the results are not overly dependent on limiting the data set to events that have some associated cost or injuries.  The main difference occurs for total injuries, where heat-related events are more dangerous in the larger data set.  However, the importance of heat-related events was already established in the smaller data set; the take-away messages don't change much when including more events.
+
+## Conclusions
+It likely comes as no surprise that large storms like hurricanes and tornadoes have a large impact on both the US's economy and its population.  If the NOAA, or another entity, could provide more advance warning or better guidance when such a storm is expected to occur, it could reduce the number of associated injuries and fatalities, if not perhaps the property damage.  
+
+However, an even larger threat is heat-related events (droughts and heat waves).  While they cause little economic damage, heat waves cause huge population damage.  Since 1990 there have been nearly 3.5 injuries per heat wave; while this sounds low, hurricanes cause the second-most injuries per event at only around 1.5, and all other categories result in fewer than one injury per event.  Similarly there has been an average of over 1 fatality per heat wave while no other category has resulted in even .2 deaths per event.  Because of this high rate, heat waves have producd the 3rd most total injuries and the most fatalities despite being the second least-frequent event (occurring twice as often as hurricanes but 1/31st as often as flooding or 1/11th as often as tornadoes).  If resources could be focused towards keeping people in properly air conditioned housing, or perhaps making the danger of heat waves more apparent to the public, a large reduction in weather-related fatalities could be realized. 
+
+Aside from heat waves, tornadoes, and hurricanes, which were the leading categories in the various lists described so far, flooding also appears prominently in many of the lists.  In particular, flooding has caused the greatest total economic damage of any weather category since 1990 (see the third figure).  Flooding is presumably a downstream (no pun intended) effect of other weather, such as hurricanes or thunderstorms, but could be addressed separately.  Better preparation for flooding could greatly reduce the economic impact of weather in the US.  

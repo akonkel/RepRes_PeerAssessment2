@@ -63,7 +63,8 @@ This still leaves quite a bit of data: nearly 7500 entries and 135 event types. 
 
 ## Results
 Moving on to the first question: what events are most harmful to population health?  To answer this question, I'll start by making a table of fatalities and injuries by event type.  I'll look at both the total and the mean, since there could be a difference between events that happen often but are less dangerous and those that are rare but very dangerous.
-``` {r}
+``` {r,results='hide'}
+#note this is the one place where I hide output; no reason to show all this.
 sort(with(storm2,tapply(INJURIES,EVTYPE,sum)))
 sort(with(storm2,tapply(INJURIES,EVTYPE,mean)))
 sort(with(storm2,tapply(FATALITIES,EVTYPE,sum)))
@@ -71,18 +72,21 @@ sort(with(storm2,tapply(FATALITIES,EVTYPE,mean)))
 ```
 It looks like major wind storms (hurricanes, typhoons, and tornadoes) cause the most injuries.  Somewhat surprisingly, they don't have the highest average injury rate though; that distinction belongs to wild fires and heat.  However, it also becomes clear that these categories should be combined if possible.  There are many entries that involve cold, for example, and small categories (like wild fires) with few entries.  Looking over the options, I will sort the events into 'flood', 'cold', 'heat', 'thunderstorm', 'hurricane', 'tornado', 'wind', 'storm', and 'other'.  Some events could be sorted into multiple categories, such as 'TSTM WIND' into thunderstorm or wind, but I will order the categorization so that events get sorted more into causes (such as the thunderstorm) as opposed to the effects (the wind).  Some categorizations may be inaccurate, but the categories can be viewed broadly.
 ``` {r}
-storm2 <- storm2 %>% mutate(event_cat='other') %>% mutate(event_cat=ifelse(grepl('wind',tolower(EVTYPE)),'wind',event_cat)) %>% mutate(event_cat=ifelse(grepl('flood',tolower(EVTYPE)),'flooding',event_cat)) %>% mutate(event_cat=ifelse(grepl('cold',tolower(EVTYPE)),'cold',event_cat)) %>% mutate(event_cat=ifelse(grepl('freez',tolower(EVTYPE)),'cold',event_cat)) %>% mutate(event_cat=ifelse(grepl('snow',tolower(EVTYPE)),'cold',event_cat)) %>% mutate(event_cat=ifelse(grepl('heat',tolower(EVTYPE)),'heat',event_cat)) %>% mutate(event_cat=ifelse(grepl('storm',tolower(EVTYPE)),'storm',event_cat)) %>% mutate(event_cat=ifelse(grepl('tstm',tolower(EVTYPE)),'thunderstorm',event_cat)) %>% mutate(event_cat=ifelse(grepl('thunder',tolower(EVTYPE)),'thunderstorm',event_cat)) %>% mutate(event_cat=ifelse(grepl('hurr',tolower(EVTYPE)),'hurricane',event_cat)) %>% mutate(event_cat=ifelse(grepl('typh',tolower(EVTYPE)),'hurricane',event_cat)) %>% mutate(event_cat=ifelse(grepl('torn',tolower(EVTYPE)),'tornado',event_cat)) %>% mutate(event_cat=ifelse(grepl('heat',tolower(EVTYPE)),'heat',event_cat))
+storm2 <- storm2 %>% mutate(event_cat='other') %>% mutate(event_cat=ifelse(grepl('wind',tolower(EVTYPE)),'wind',event_cat)) %>% mutate(event_cat=ifelse(grepl('flood',tolower(EVTYPE)),'flooding',event_cat)) %>% mutate(event_cat=ifelse(grepl('cold',tolower(EVTYPE)),'cold',event_cat)) %>% mutate(event_cat=ifelse(grepl('freez',tolower(EVTYPE)),'cold',event_cat)) %>% mutate(event_cat=ifelse(grepl('snow',tolower(EVTYPE)),'cold',event_cat)) %>% mutate(event_cat=ifelse(grepl('heat',tolower(EVTYPE)),'heat',event_cat)) %>% mutate(event_cat=ifelse(grepl('storm',tolower(EVTYPE)),'storm',event_cat)) %>%
+mutate(event_cat=ifelse(grepl('ice',tolower(EVTYPE)),'cold',event_cat)) %>%  mutate(event_cat=ifelse(grepl('tstm',tolower(EVTYPE)),'thunderstorm',event_cat)) %>% mutate(event_cat=ifelse(grepl('thunder',tolower(EVTYPE)),'thunderstorm',event_cat)) %>% mutate(event_cat=ifelse(grepl('hurr',tolower(EVTYPE)),'hurricane',event_cat)) %>% mutate(event_cat=ifelse(grepl('typh',tolower(EVTYPE)),'hurricane',event_cat)) %>% mutate(event_cat=ifelse(grepl('torn',tolower(EVTYPE)),'tornado',event_cat)) %>% mutate(event_cat=ifelse(grepl('trop',tolower(EVTYPE)),'hurricane',event_cat))
 ```
 Now I'll visualize the results.
-``` {r}
+``` {r,fig.width=9, fig.height = 8}
 library(ggplot2)
+library(gridExtra)
 injuries <- storm2 %>% group_by(event_cat) %>% summarize(aveInjury=mean(INJURIES),totInjury=sum(INJURIES),num=length(INJURIES))
 fatalities <- storm2 %>% group_by(event_cat) %>% summarize(aveFatal=mean(FATALITIES),totFatal=sum(FATALITIES),num=length(FATALITIES))
 par(mar=c(4,4,2,0),mfrow=c(2,2))
-ggplot(injuries,aes(event_cat,aveInjury,width=num/max(num))) + geom_bar(stat='identity',fill='red') + labs(y='Average Number of Injuries per Event',x='Event Category',title='Average Number of Injuries')
-ggplot(injuries,aes(event_cat,totInjury,width=num/max(num))) + geom_bar(stat='identity',fill='red') + labs(y='Total Number of Injuries per Event',x='Event Category',title='Total Number of Injuries')
-ggplot(fatalities,aes(event_cat,aveFatal,width=num/max(num))) + geom_bar(stat='identity',fill='darkred') + labs(y='Average Number of Fatalities per Event',x='Event Category',title='Average Number of Fatalities')
-ggplot(fatalities,aes(event_cat,totFatal,width=num/max(num))) + geom_bar(stat='identity',fill='darkred') + labs(y='Total Number of Fatalities per Event',x='Event Category',title='Total Number of Fatalities')
+plot1 <- ggplot(injuries,aes(event_cat,aveInjury,width=num/max(num))) + geom_bar(stat='identity',fill='red') + labs(y='Average Number of Injuries per Event',x='Event Category',title='Average Number of Injuries')
+plot2 <- ggplot(injuries,aes(event_cat,totInjury,width=num/max(num))) + geom_bar(stat='identity',fill='red') + labs(y='Total Number of Injuries per Event',x='Event Category',title='Total Number of Injuries')
+plot3 <- ggplot(fatalities,aes(event_cat,aveFatal,width=num/max(num))) + geom_bar(stat='identity',fill='darkred') + labs(y='Average Number of Fatalities per Event',x='Event Category',title='Average Number of Fatalities')
+plot4 <- ggplot(fatalities,aes(event_cat,totFatal,width=num/max(num))) + geom_bar(stat='identity',fill='darkred') + labs(y='Total Number of Fatalities per Event',x='Event Category',title='Total Number of Fatalities')
+grid.arrange(plot1,plot2,plot3,plot4, ncol=2)
 ```
 
 ## Conclusions
